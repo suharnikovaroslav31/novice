@@ -1,0 +1,13 @@
+.env
+.venv/
+backend/.venv/
+backend/novice_session.session
+backend/**/*.session
+data/users/
+data/app_config.json
+__pycache__/
+*.pyc
+node_modules/
+frontend/dist/
+.DS_Store
+*.log

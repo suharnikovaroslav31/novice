@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>NOVICE — дешёвые NFT от новичков</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@100..150,500..800&family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <section id="view-search" class="view active">
+        <header class="hero">
+          <div class="hero-top">
+            <div class="live-dot"><i></i> floor scan</div>
+            <div class="scan" aria-hidden="true"></div>
+          </div>
+          <h1 class="brand">NOV<em>ICE</em></h1>
+          <p class="tagline">
+            Радар дешёвых Telegram NFT — только новички, без перекупов.
+          </p>
+          <div class="pill-row" id="pills">
+            <span class="pill lime" id="pill-level">ур. ≤ 1</span>
+            <span class="pill" id="pill-nfts">≤ 2 NFT</span>
+            <span class="pill">без перекупов</span>
+            <span class="pill" id="pill-accounts">аккаунты: 0/3</span>
+          </div>
+        </header>
+
+        <section class="controls">
+          <div class="search-row">
+            <input id="query" placeholder="Pepe, Cake, юзер…" />
+            <button class="btn btn-primary" id="btn-search">Скан</button>
+          </div>
+
+          <div class="filters-grid">
+            <div class="field">
+              <label>Макс. уровень</label>
+              <input id="max-level" type="number" min="0" max="20" value="1" />
+            </div>
+            <div class="field">
+              <label>Макс. NFT у продавца</label>
+              <input id="max-nfts" type="number" min="1" max="50" value="2" />
+            </div>
+            <div class="field">
+              <label>Цена до (TON)</label>
+              <input id="max-price" type="number" min="0" step="0.1" placeholder="без лимита" />
+            </div>
+            <div class="field">
+              <label>Цена от (TON)</label>
+              <input id="min-price" type="number" min="0" step="0.1" placeholder="0" />
+            </div>
+          </div>
+
+          <div class="toggle-row" id="source-chips">
+            <button type="button" class="chip" data-source="mrkt">MRKT</button>
+            <button type="button" class="chip" data-source="portals">Portals</button>
+            <button type="button" class="chip" data-source="tonnel">Tonnel</button>
+            <button type="button" class="chip" data-source="demo">Demo</button>
+            <button type="button" class="chip on" id="chip-novice">только новички</button>
+            <button type="button" class="chip on" id="chip-reseller">без перекупов</button>
+          </div>
+
+          <div class="toggle-row">
+            <button class="btn btn-ghost" id="btn-apply">Применить</button>
+            <button class="btn btn-ghost" id="btn-go-accounts">Привязать аккаунты</button>
+          </div>
+        </section>
+
+        <div class="meta">
+          <div>
+            <strong id="count">…</strong>
+            лотов найдено
+          </div>
+          <div id="sources-meta">ожидание…</div>
+        </div>
+
+        <div id="status"></div>
+        <div class="list" id="list"></div>
+      </section>
+
+      <section id="view-accounts" class="view">
+        <header class="hero">
+          <h1 class="brand accounts-brand">ACC<em>OUNTS</em></h1>
+          <p class="tagline">
+            Привяжи MRKT, Portals и Tonnel прямо здесь — в любой момент.
+          </p>
+        </header>
+
+        <div class="account-list" id="account-list"></div>
+
+        <section class="controls auto-box">
+          <h3 class="block-title">Войти по телефону</h3>
+          <p class="hint" id="auto-hint">
+            my.telegram.org не нужен. Номер → код из Telegram → MRKT, Portals и Tonnel привяжутся сами.
+          </p>
+
+          <div id="api-setup" class="filters-grid" style="display: none; margin-bottom: 10px">
+            <div class="field">
+              <label>API ID (один раз)</label>
+              <input id="api-id" type="number" placeholder="с my.telegram.org" />
+            </div>
+            <div class="field">
+              <label>API HASH (один раз)</label>
+              <input id="api-hash" type="text" placeholder="с my.telegram.org" />
+            </div>
+            <p class="hint" style="grid-column: 1 / -1; margin: 0">
+              Telegram так устроен: приложению нужен api_id. Зайди на
+              <a href="https://my.telegram.org/auth" target="_blank" rel="noreferrer">my.telegram.org</a>
+              → API development tools → скопируй 2 поля. Это <b>один раз навсегда</b>, потом только телефон.
+            </p>
+            <div style="grid-column: 1 / -1">
+              <button class="btn btn-ghost" id="btn-save-api" type="button">Сохранить и дальше только телефон</button>
+            </div>
+          </div>
+
+          <div class="filters-grid">
+            <div class="field" style="grid-column: 1 / -1">
+              <label>Телефон</label>
+              <input id="phone" type="tel" placeholder="+79001234567" />
+            </div>
+            <div class="field" id="code-field" style="grid-column: 1 / -1; display: none">
+              <label>Код из Telegram</label>
+              <input id="tg-code" type="text" inputmode="numeric" placeholder="12345" />
+            </div>
+            <div class="field" id="pass-field" style="grid-column: 1 / -1; display: none">
+              <label>Пароль 2FA (если есть)</label>
+              <input id="tg-pass" type="password" placeholder="облачный пароль" />
+            </div>
+          </div>
+          <div class="toggle-row">
+            <button class="btn btn-primary" id="btn-auto-start">Получить код</button>
+            <button class="btn btn-ghost" id="btn-auto-confirm" style="display: none">
+              Войти и привязать
+            </button>
+          </div>
+          <div id="auto-status" class="auto-status"></div>
+        </section>
+      </section>
+    </div>
+
+    <nav class="tabbar">
+      <button class="tab on" data-view="search">Поиск</button>
+      <button class="tab" data-view="accounts">Аккаунты</button>
+    </nav>
+
+    <div class="modal-backdrop" id="modal" hidden>
+      <div class="modal">
+        <button class="modal-close" id="modal-close">×</button>
+        <h3 id="modal-title">Подключить</h3>
+        <p class="hint" id="modal-hint"></p>
+        <div class="field">
+          <label>Токен / auth</label>
+          <textarea id="modal-token" rows="4" placeholder="Вставь токен сюда"></textarea>
+        </div>
+        <div class="toggle-row">
+          <button class="btn btn-primary" id="modal-save">Сохранить</button>
+          <button class="btn btn-ghost" id="modal-open-market">Открыть маркет</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

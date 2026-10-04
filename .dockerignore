@@ -1,0 +1,10 @@
+.venv
+backend/.venv
+frontend/node_modules
+.git
+.env
+data
+**/__pycache__
+*.pyc
+*.session
+agent-transcripts

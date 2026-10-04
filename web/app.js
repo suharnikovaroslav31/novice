@@ -1,0 +1,579 @@
+const tg = window.Telegram?.WebApp;
+tg?.ready?.();
+tg?.expand?.();
+tg?.setHeaderColor?.("#eef6ea");
+tg?.setBackgroundColor?.("#eef6ea");
+
+const STORAGE_KEY = "novice_tokens_v1";
+const STORAGE_API = "novice_api_creds_v1";
+
+const MARKETS = {
+  mrkt: {
+    title: "MRKT",
+    desc: "Маркет подарков @mrkt",
+    openUrl: "https://t.me/mrkt",
+    hint: "Открой MRKT → вставь сюда Authorization / token. Или используй автопривязку ниже.",
+  },
+  portals: {
+    title: "Portals",
+    desc: "Маркет @portals",
+    openUrl: "https://t.me/portals/market",
+    hint: "Открой Portals → вставь токен вида tma .... Или автопривязка.",
+  },
+  tonnel: {
+    title: "Tonnel",
+    desc: "Маркет Tonnel Network",
+    openUrl: "https://t.me/tonnel_network_bot",
+    hint: "Открой Tonnel → вставь authData / initData. Или автопривязка.",
+  },
+};
+
+const state = {
+  sources: [],
+  onlyNovice: true,
+  excludeResellers: true,
+  tokens: loadTokens(),
+  accountStatus: null,
+  modalSource: null,
+  loginId: null,
+};
+
+const els = {
+  query: document.getElementById("query"),
+  maxLevel: document.getElementById("max-level"),
+  maxNfts: document.getElementById("max-nfts"),
+  maxPrice: document.getElementById("max-price"),
+  minPrice: document.getElementById("min-price"),
+  list: document.getElementById("list"),
+  status: document.getElementById("status"),
+  count: document.getElementById("count"),
+  sourcesMeta: document.getElementById("sources-meta"),
+  pillLevel: document.getElementById("pill-level"),
+  pillNfts: document.getElementById("pill-nfts"),
+  pills: document.getElementById("pills"),
+  pillAccounts: document.getElementById("pill-accounts"),
+  accountList: document.getElementById("account-list"),
+  modal: document.getElementById("modal"),
+  modalTitle: document.getElementById("modal-title"),
+  modalHint: document.getElementById("modal-hint"),
+  modalToken: document.getElementById("modal-token"),
+  autoStatus: document.getElementById("auto-status"),
+  codeField: document.getElementById("code-field"),
+  passField: document.getElementById("pass-field"),
+  btnAutoConfirm: document.getElementById("btn-auto-confirm"),
+};
+
+function loadTokens() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveTokensLocal(tokens) {
+  state.tokens = { ...tokens };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tokens));
+}
+
+function initData() {
+  return tg?.initData || "";
+}
+
+function localUserId() {
+  const fromTg = tg?.initDataUnsafe?.user?.id;
+  if (fromTg) return String(fromTg);
+  let id = localStorage.getItem("novice_local_uid");
+  if (!id) {
+    id = "local-" + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem("novice_local_uid", id);
+  }
+  return id;
+}
+
+function authHeaders(extra = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-User-Id": localUserId(),
+    ...extra,
+  };
+  const data = initData();
+  if (data) headers["X-Telegram-Init-Data"] = data;
+  const clean = (value) =>
+    value && !String(value).startsWith("__server__:") ? value : null;
+  if (clean(state.tokens.mrkt)) headers["X-Mrkt-Token"] = state.tokens.mrkt;
+  if (clean(state.tokens.portals)) headers["X-Portals-Token"] = state.tokens.portals;
+  if (clean(state.tokens.tonnel)) headers["X-Tonnel-Token"] = state.tokens.tonnel;
+  return headers;
+}
+
+/* tabs */
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => switchView(tab.dataset.view));
+});
+document.getElementById("btn-go-accounts").addEventListener("click", () => switchView("accounts"));
+
+function switchView(name) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.view === name));
+  document.getElementById(`view-${name}`)?.classList.add("active");
+  if (name === "accounts") renderAccounts();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* source chips */
+document.querySelectorAll("[data-source]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const id = btn.dataset.source;
+    if (state.sources.includes(id)) {
+      state.sources = state.sources.filter((s) => s !== id);
+      btn.classList.remove("on");
+    } else {
+      state.sources.push(id);
+      btn.classList.add("on");
+    }
+  });
+});
+
+document.getElementById("chip-novice").addEventListener("click", (e) => {
+  state.onlyNovice = !state.onlyNovice;
+  e.currentTarget.classList.toggle("on", state.onlyNovice);
+});
+document.getElementById("chip-reseller").addEventListener("click", (e) => {
+  state.excludeResellers = !state.excludeResellers;
+  e.currentTarget.classList.toggle("on", state.excludeResellers);
+});
+
+/* accounts UI */
+function renderAccounts() {
+  const statusMap = Object.fromEntries(
+    (state.accountStatus?.accounts || []).map((a) => [a.source, a]),
+  );
+
+  els.accountList.innerHTML = Object.entries(MARKETS)
+    .map(([key, meta]) => {
+      const st = statusMap[key];
+      const connected = Boolean(state.tokens[key] || st?.connected);
+      return `
+        <article class="account-card">
+          <div class="head">
+            <h3>${meta.title}</h3>
+            <span class="status ${connected ? "on" : "off"}">${connected ? "подключен" : "не подключен"}</span>
+          </div>
+          <p class="desc">${meta.desc}</p>
+          <div class="account-actions">
+            <button class="btn btn-primary" data-connect="${key}">${connected ? "Обновить" : "Привязать"}</button>
+            <button class="btn btn-ghost" data-disconnect="${key}" ${connected ? "" : "disabled"}>Отвязать</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  els.accountList.querySelectorAll("[data-connect]").forEach((btn) => {
+    btn.addEventListener("click", () => openModal(btn.dataset.connect));
+  });
+  els.accountList.querySelectorAll("[data-disconnect]").forEach((btn) => {
+    btn.addEventListener("click", () => disconnectSource(btn.dataset.disconnect));
+  });
+
+  const count = Object.keys(MARKETS).filter(
+    (k) => state.tokens[k] || statusMap[k]?.connected,
+  ).length;
+  els.pillAccounts.textContent = `аккаунты: ${count}/3`;
+}
+
+function openModal(source) {
+  state.modalSource = source;
+  const meta = MARKETS[source];
+  els.modalTitle.textContent = `Подключить ${meta.title}`;
+  els.modalHint.textContent = meta.hint;
+  els.modalToken.value = state.tokens[source] || "";
+  els.modal.hidden = false;
+}
+
+document.getElementById("modal-close").addEventListener("click", () => {
+  els.modal.hidden = true;
+});
+document.getElementById("modal-open-market").addEventListener("click", () => {
+  const meta = MARKETS[state.modalSource];
+  if (!meta) return;
+  if (tg?.openTelegramLink) tg.openTelegramLink(meta.openUrl);
+  else window.open(meta.openUrl, "_blank");
+});
+document.getElementById("modal-save").addEventListener("click", async () => {
+  const source = state.modalSource;
+  const token = els.modalToken.value.trim();
+  if (!source || !token) {
+    alert("Вставь токен");
+    return;
+  }
+  const next = { ...state.tokens, [source]: token };
+  saveTokensLocal(next);
+  await syncTokensToServer({ [source]: token });
+  els.modal.hidden = true;
+  await refreshAccountStatus();
+  renderAccounts();
+  tg?.HapticFeedback?.notificationOccurred?.("success");
+});
+
+async function disconnectSource(source) {
+  const next = { ...state.tokens };
+  delete next[source];
+  saveTokensLocal(next);
+  try {
+    await fetch("/api/accounts/disconnect", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        init_data: initData(),
+        user_id: localUserId(),
+        source,
+      }),
+    });
+  } catch {
+    /* ignore */
+  }
+  await refreshAccountStatus();
+  renderAccounts();
+}
+
+async function syncTokensToServer(partial) {
+  const tokens = {
+    mrkt: partial.mrkt ?? null,
+    portals: partial.portals ?? null,
+    tonnel: partial.tonnel ?? null,
+  };
+  // если передали только один ключ — не затираем остальные
+  const payloadTokens = {
+    mrkt: partial.mrkt !== undefined ? partial.mrkt : state.tokens.mrkt || null,
+    portals: partial.portals !== undefined ? partial.portals : state.tokens.portals || null,
+    tonnel: partial.tonnel !== undefined ? partial.tonnel : state.tokens.tonnel || null,
+  };
+  await fetch("/api/accounts/save", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      init_data: initData(),
+      user_id: localUserId(),
+      tokens: payloadTokens,
+    }),
+  });
+  return tokens;
+}
+
+async function refreshAccountStatus() {
+  const params = new URLSearchParams({ user_id: localUserId() });
+  if (initData()) params.set("init_data", initData());
+  try {
+    const res = await fetch(`/api/accounts?${params}`, { headers: authHeaders() });
+    if (res.ok) {
+      state.accountStatus = await res.json();
+      const count = state.accountStatus.connected_count || 0;
+      els.pillAccounts.textContent = `аккаунты: ${count}/3`;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/* auto login — phone + code (api_id один раз на сервере) */
+state.phoneOnly = false;
+
+async function loadAutoConfig() {
+  try {
+    const res = await fetch("/api/accounts/auto/config");
+    const data = await res.json();
+    state.phoneOnly = Boolean(data.phone_only);
+    const setup = document.getElementById("api-setup");
+    const hint = document.getElementById("auto-hint");
+    if (state.phoneOnly) {
+      setup.style.display = "none";
+      hint.textContent =
+        "Укажи номер → получи код в Telegram → готово. Подключатся MRKT, Portals и Tonnel.";
+    } else {
+      setup.style.display = "grid";
+      hint.textContent =
+        "Сначала один раз вставь api_id/api_hash (Telegram так требует). Потом вход всегда только по телефону и коду.";
+    }
+  } catch {
+    document.getElementById("api-setup").style.display = "grid";
+  }
+}
+
+try {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_API) || "{}");
+  if (saved.phone) document.getElementById("phone").value = saved.phone;
+  if (saved.api_id) document.getElementById("api-id").value = saved.api_id;
+  if (saved.api_hash) document.getElementById("api-hash").value = saved.api_hash;
+} catch {
+  /* ignore */
+}
+
+document.getElementById("btn-save-api")?.addEventListener("click", async () => {
+  const api_id = Number(document.getElementById("api-id").value);
+  const api_hash = document.getElementById("api-hash").value.trim();
+  if (!api_id || !api_hash) {
+    els.autoStatus.textContent = "Нужны оба поля с my.telegram.org";
+    return;
+  }
+  els.autoStatus.textContent = "Сохраняем…";
+  try {
+    const res = await fetch("/api/setup/telegram-api", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ api_id, api_hash }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Ошибка");
+    localStorage.setItem(
+      STORAGE_API,
+      JSON.stringify({
+        ...(JSON.parse(localStorage.getItem(STORAGE_API) || "{}")),
+        api_id,
+        api_hash,
+      }),
+    );
+    await loadAutoConfig();
+    els.autoStatus.textContent = "Ок! Теперь только телефон и код.";
+  } catch (err) {
+    els.autoStatus.textContent = err.message;
+  }
+});
+
+document.getElementById("btn-auto-start").addEventListener("click", async () => {
+  const phone = document.getElementById("phone").value.trim();
+  if (!phone) {
+    els.autoStatus.textContent = "Укажи номер телефона";
+    return;
+  }
+  localStorage.setItem(
+    STORAGE_API,
+    JSON.stringify({
+      ...(JSON.parse(localStorage.getItem(STORAGE_API) || "{}")),
+      phone,
+    }),
+  );
+
+  const payload = {
+    init_data: initData(),
+    user_id: localUserId(),
+    phone,
+  };
+
+  // если ещё не настроено — отправим api вместе с телефоном и сохраним на сервере
+  if (!state.phoneOnly) {
+    const api_id = Number(document.getElementById("api-id").value);
+    const api_hash = document.getElementById("api-hash").value.trim();
+    if (!api_id || !api_hash) {
+      els.autoStatus.textContent = "Сначала заполни api_id и api_hash один раз (блок выше)";
+      document.getElementById("api-setup").style.display = "grid";
+      return;
+    }
+    payload.api_id = api_id;
+    payload.api_hash = api_hash;
+  }
+
+  els.autoStatus.textContent = "Отправляем код в Telegram…";
+  try {
+    const res = await fetch("/api/accounts/auto/start", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка");
+    state.loginId = data.login_id;
+    state.phoneOnly = true;
+    document.getElementById("api-setup").style.display = "none";
+    els.codeField.style.display = "block";
+    els.passField.style.display = "block";
+    els.btnAutoConfirm.style.display = "inline-flex";
+    els.autoStatus.textContent = data.message || "Код отправлен — смотри Telegram";
+  } catch (err) {
+    els.autoStatus.textContent = err.message;
+  }
+});
+
+document.getElementById("btn-auto-confirm").addEventListener("click", async () => {
+  const code = document.getElementById("tg-code").value.trim();
+  const password = document.getElementById("tg-pass").value.trim();
+  if (!state.loginId || !code) {
+    els.autoStatus.textContent = "Введи код из Telegram";
+    return;
+  }
+  els.autoStatus.textContent = "Привязываем MRKT / Portals / Tonnel…";
+  try {
+    const res = await fetch("/api/accounts/auto/confirm", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        init_data: initData(),
+        user_id: localUserId(),
+        login_id: state.loginId,
+        code,
+        password: password || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Ошибка");
+
+    if (data.tokens) {
+      saveTokensLocal({ ...state.tokens, ...data.tokens });
+    }
+    await refreshAccountStatus();
+    els.autoStatus.textContent = `Готово: ${(data.connected || []).join(", ") || "привязано"}`;
+    renderAccounts();
+    tg?.HapticFeedback?.notificationOccurred?.("success");
+  } catch (err) {
+    els.autoStatus.textContent = err.message;
+  }
+});
+
+/* search */
+async function search() {
+  const params = new URLSearchParams({
+    max_seller_level: els.maxLevel.value || "1",
+    max_seller_nfts: els.maxNfts.value || "2",
+    only_novice: String(state.onlyNovice),
+    exclude_resellers: String(state.excludeResellers),
+    limit: "60",
+    user_id: localUserId(),
+  });
+
+  if (els.query.value.trim()) params.set("query", els.query.value.trim());
+  if (els.maxPrice.value !== "") params.set("max_price_ton", els.maxPrice.value);
+  if (els.minPrice.value !== "") params.set("min_price_ton", els.minPrice.value);
+  if (state.sources.length) params.set("sources", state.sources.join(","));
+  if (initData()) params.set("init_data", initData());
+
+  els.pillLevel.textContent = `ур. ≤ ${els.maxLevel.value || 1}`;
+  els.pillNfts.textContent = `≤ ${els.maxNfts.value || 2} NFT`;
+
+  els.status.innerHTML = `<div class="loading"><div class="spinner"></div>Сканируем новичков…</div>`;
+  els.list.innerHTML = "";
+  els.count.textContent = "…";
+
+  try {
+    const res = await fetch(`/api/search?${params}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(`Ошибка поиска: ${res.status}`);
+    const data = await res.json();
+    render(data);
+    tg?.HapticFeedback?.impactOccurred?.("light");
+  } catch (err) {
+    els.status.innerHTML = `<div class="error">${err.message}</div>`;
+    els.count.textContent = "0";
+  }
+}
+
+function render(data) {
+  document.querySelector(".pill.warn")?.remove();
+  if (data.demo) {
+    const warn = document.createElement("span");
+    warn.className = "pill warn";
+    warn.textContent = "demo";
+    els.pills.appendChild(warn);
+  }
+
+  els.count.textContent = String(data.total);
+  els.sourcesMeta.textContent = data.sources_used?.length
+    ? data.sources_used.join(" · ")
+    : "нет источников";
+
+  if (!data.items.length) {
+    els.status.innerHTML =
+      `<div class="empty">Пусто. Зайди во вкладку «Аккаунты» и привяжи маркеты.</div>`;
+    return;
+  }
+
+  els.status.innerHTML = "";
+  els.list.innerHTML = data.items.map((item, index) => cardHtml(item, index)).join("");
+
+  els.list.querySelectorAll("img[data-fallback]").forEach((img) => {
+    img.addEventListener("error", () => {
+      const wrap = img.parentElement;
+      if (!wrap) return;
+      wrap.innerHTML = `<div class="thumb-fallback">${img.dataset.fallback || "?"}</div>`;
+    });
+  });
+
+  els.list.querySelectorAll("[data-url]").forEach((btn) => {
+    btn.addEventListener("click", () => openUrl(btn.dataset.url));
+  });
+}
+
+function cardHtml(item, index) {
+  const traits =
+    [item.model, item.backdrop, item.symbol].filter(Boolean).join(" · ") || "без трейтов";
+  const seller = item.seller.display_name || item.seller.username || "продавец";
+  const letter = (item.collection || "?").slice(0, 1).toUpperCase();
+  const img = item.image_url
+    ? `<img src="${escapeAttr(item.image_url)}" alt="${escapeAttr(item.title)}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${escapeAttr(letter)}" />`
+    : `<div class="thumb-fallback">${escapeHtml(letter)}</div>`;
+
+  const level =
+    item.seller.level != null ? `<span class="badge">lvl ${item.seller.level}</span>` : "";
+  const nfts =
+    item.seller.nft_count != null
+      ? `<span class="badge">${item.seller.nft_count} NFT</span>`
+      : "";
+
+  return `
+    <article class="card" style="animation-delay:${Math.min(index, 12) * 0.03}s">
+      <div class="thumb">${img}</div>
+      <div class="card-body">
+        <div class="card-top">
+          <h2 class="title">${escapeHtml(item.title)}</h2>
+          <div class="price">${item.price_ton}</div>
+        </div>
+        <p class="sub">${escapeHtml(traits)} · ${escapeHtml(seller)}</p>
+        <div class="badges">
+          <span class="badge source">${escapeHtml(item.source)}</span>
+          ${level}${nfts}
+          <span class="badge score">${Math.round(item.novice_score || 0)}</span>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-primary" data-url="${escapeAttr(item.url || "https://t.me/")}">Открыть лот</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function openUrl(url) {
+  if (url.startsWith("https://t.me/") && tg?.openTelegramLink) tg.openTelegramLink(url);
+  else if (tg?.openLink) tg.openLink(url);
+  else window.open(url, "_blank");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+function escapeAttr(value) {
+  return escapeHtml(value).replaceAll("'", "&#39;");
+}
+
+document.getElementById("btn-search").addEventListener("click", search);
+document.getElementById("btn-apply").addEventListener("click", search);
+els.query.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") search();
+});
+
+// bootstrap
+(async () => {
+  if (state.tokens.mrkt || state.tokens.portals || state.tokens.tonnel) {
+    try {
+      await syncTokensToServer(state.tokens);
+    } catch {
+      /* ignore */
+    }
+  }
+  await loadAutoConfig();
+  await refreshAccountStatus();
+  renderAccounts();
+  search();
+})();
