@@ -7,6 +7,9 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
+const { accountStatus, getTokens, saveTokens } = require("./lib/store");
+const { startPhoneLogin, confirmPhoneLogin } = require("./lib/phone");
+const { searchMarkets } = require("./lib/search");
 
 const PORT = Number(process.env.PORT || 8000);
 const WEB = path.join(__dirname, "web");
@@ -158,41 +161,52 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/api/search") {
-    const maxPrice = url.searchParams.get("max_price_ton");
-    const query = (url.searchParams.get("query") || "").toLowerCase();
+    const filters = {
+      maxPrice: url.searchParams.get("max_price_ton") ? Number(url.searchParams.get("max_price_ton")) : null,
+      minPrice: url.searchParams.get("min_price_ton") ? Number(url.searchParams.get("min_price_ton")) : null,
+      query: url.searchParams.get("query") || "",
+      maxLevel: Number(url.searchParams.get("max_seller_level") || 1),
+      maxNfts: Number(url.searchParams.get("max_seller_nfts") || 2),
+      onlyNovice: url.searchParams.get("only_novice") !== "false",
+      excludeResellers: url.searchParams.get("exclude_resellers") !== "false",
+      limit: 60,
+    };
+    const tokens = getTokens(url.searchParams.get("user_id"));
+    const live = Boolean(tokens.mrkt || tokens.portals || tokens.tonnel);
+    if (live) {
+      try {
+        return send(res, 200, JSON.stringify(await searchMarkets(tokens, filters)));
+      } catch (err) {
+        return send(res, 500, JSON.stringify({ detail: err.message || "Ошибка поиска" }));
+      }
+    }
+    const query = filters.query.toLowerCase();
     let items = LISTINGS;
-    if (maxPrice) items = items.filter((item) => item.price_ton <= Number(maxPrice));
+    if (filters.maxPrice != null) items = items.filter((item) => item.price_ton <= filters.maxPrice);
     if (query) {
-      items = items.filter((item) =>
-        `${item.title} ${item.collection} ${item.model}`.toLowerCase().includes(query)
-      );
+      items = items.filter((item) => `${item.title} ${item.collection} ${item.model}`.toLowerCase().includes(query));
     }
     return send(
       res,
       200,
-      JSON.stringify({
-        items,
-        total: items.length,
-        demo: true,
-        sources_used: ["demo"],
-        sources_failed: [],
-      })
+      JSON.stringify({ items, total: items.length, demo: true, sources_used: ["demo"], sources_failed: [] })
     );
   }
 
-  if (url.pathname === "/api/accounts") {
-    return send(
-      res,
-      200,
-      JSON.stringify({
-        accounts: [
-          { source: "mrkt", connected: false },
-          { source: "portals", connected: false },
-          { source: "tonnel", connected: false },
-        ],
-        connected_count: 0,
-      })
-    );
+  if (url.pathname === "/api/accounts" && req.method === "GET") {
+    return send(res, 200, JSON.stringify(accountStatus(url.searchParams.get("user_id"))));
+  }
+
+  if (url.pathname === "/api/accounts/save" && req.method === "POST") {
+    const body = await readBody(req);
+    saveTokens(body.user_id, body.tokens || {});
+    return send(res, 200, JSON.stringify({ ok: true, ...accountStatus(body.user_id) }));
+  }
+
+  if (url.pathname === "/api/accounts/disconnect" && req.method === "POST") {
+    const body = await readBody(req);
+    if (body.source) saveTokens(body.user_id, { [body.source]: "" });
+    return send(res, 200, JSON.stringify({ ok: true, ...accountStatus(body.user_id) }));
   }
 
   if (url.pathname === "/api/accounts/auto/config") {
@@ -200,11 +214,41 @@ const server = http.createServer(async (req, res) => {
       res,
       200,
       JSON.stringify({
-        phone_only: false,
+        phone_only: true,
         needs_api_setup: false,
-        hint: "Сначала открой поиск. Привязка маркетов включится следующим шагом.",
+        hint: "Номер → код из Telegram → MRKT, Portals и Tonnel привяжутся сами.",
       })
     );
+  }
+
+  if (url.pathname === "/api/accounts/auto/start" && req.method === "POST") {
+    const body = await readBody(req);
+    try {
+      const result = await startPhoneLogin(body.phone);
+      return send(res, 200, JSON.stringify(result));
+    } catch (err) {
+      return send(res, 400, JSON.stringify({ detail: err.message || "Не удалось отправить код" }));
+    }
+  }
+
+  if (url.pathname === "/api/accounts/auto/confirm" && req.method === "POST") {
+    const body = await readBody(req);
+    try {
+      const result = await confirmPhoneLogin(body.login_id, body.code, body.password);
+      saveTokens(body.user_id, result.tokens);
+      return send(
+        res,
+        200,
+        JSON.stringify({
+          ok: true,
+          tokens: result.tokens,
+          connected: result.connected,
+          failed: result.failed,
+        })
+      );
+    } catch (err) {
+      return send(res, 400, JSON.stringify({ detail: err.message || "Не удалось войти" }));
+    }
   }
 
   if (url.pathname === "/webhook" && req.method === "POST") {

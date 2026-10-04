@@ -104,25 +104,6 @@
             my.telegram.org не нужен. Номер → код из Telegram → MRKT, Portals и Tonnel привяжутся сами.
           </p>
 
-          <div id="api-setup" class="filters-grid" style="display: none; margin-bottom: 10px">
-            <div class="field">
-              <label>API ID (один раз)</label>
-              <input id="api-id" type="number" placeholder="с my.telegram.org" />
-            </div>
-            <div class="field">
-              <label>API HASH (один раз)</label>
-              <input id="api-hash" type="text" placeholder="с my.telegram.org" />
-            </div>
-            <p class="hint" style="grid-column: 1 / -1; margin: 0">
-              Telegram так устроен: приложению нужен api_id. Зайди на
-              <a href="https://my.telegram.org/auth" target="_blank" rel="noreferrer">my.telegram.org</a>
-              → API development tools → скопируй 2 поля. Это <b>один раз навсегда</b>, потом только телефон.
-            </p>
-            <div style="grid-column: 1 / -1">
-              <button class="btn btn-ghost" id="btn-save-api" type="button">Сохранить и дальше только телефон</button>
-            </div>
-          </div>
-
           <div class="filters-grid">
             <div class="field" style="grid-column: 1 / -1">
               <label>Телефон</label>
@@ -453,65 +434,19 @@ async function refreshAccountStatus() {
 state.phoneOnly = false;
 
 async function loadAutoConfig() {
-  try {
-    const res = await fetch("/api/accounts/auto/config");
-    const data = await res.json();
-    state.phoneOnly = Boolean(data.phone_only);
-    const setup = document.getElementById("api-setup");
-    const hint = document.getElementById("auto-hint");
-    if (state.phoneOnly) {
-      setup.style.display = "none";
-      hint.textContent =
-        "Укажи номер → получи код в Telegram → готово. Подключатся MRKT, Portals и Tonnel.";
-    } else {
-      setup.style.display = "grid";
-      hint.textContent =
-        "Сначала один раз вставь api_id/api_hash (Telegram так требует). Потом вход всегда только по телефону и коду.";
-    }
-  } catch {
-    document.getElementById("api-setup").style.display = "grid";
+  state.phoneOnly = true;
+  const hint = document.getElementById("auto-hint");
+  if (hint) {
+    hint.textContent = "Номер → код из Telegram → MRKT, Portals и Tonnel привяжутся сами.";
   }
 }
 
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE_API) || "{}");
   if (saved.phone) document.getElementById("phone").value = saved.phone;
-  if (saved.api_id) document.getElementById("api-id").value = saved.api_id;
-  if (saved.api_hash) document.getElementById("api-hash").value = saved.api_hash;
 } catch {
   /* ignore */
 }
-
-document.getElementById("btn-save-api")?.addEventListener("click", async () => {
-  const api_id = Number(document.getElementById("api-id").value);
-  const api_hash = document.getElementById("api-hash").value.trim();
-  if (!api_id || !api_hash) {
-    els.autoStatus.textContent = "Нужны оба поля с my.telegram.org";
-    return;
-  }
-  els.autoStatus.textContent = "Сохраняем…";
-  try {
-    const res = await fetch("/api/setup/telegram-api", {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ api_id, api_hash }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Ошибка");
-    localStorage.setItem(
-      STORAGE_API,
-      JSON.stringify({
-        ...(JSON.parse(localStorage.getItem(STORAGE_API) || "{}")),
-        api_id,
-        api_hash,
-      }),
-    );
-    await loadAutoConfig();
-    els.autoStatus.textContent = "Ок! Теперь только телефон и код.";
-  } catch (err) {
-    els.autoStatus.textContent = err.message;
-  }
-});
 
 document.getElementById("btn-auto-start").addEventListener("click", async () => {
   const phone = document.getElementById("phone").value.trim();
@@ -533,19 +468,6 @@ document.getElementById("btn-auto-start").addEventListener("click", async () => 
     phone,
   };
 
-  // если ещё не настроено — отправим api вместе с телефоном и сохраним на сервере
-  if (!state.phoneOnly) {
-    const api_id = Number(document.getElementById("api-id").value);
-    const api_hash = document.getElementById("api-hash").value.trim();
-    if (!api_id || !api_hash) {
-      els.autoStatus.textContent = "Сначала заполни api_id и api_hash один раз (блок выше)";
-      document.getElementById("api-setup").style.display = "grid";
-      return;
-    }
-    payload.api_id = api_id;
-    payload.api_hash = api_hash;
-  }
-
   els.autoStatus.textContent = "Отправляем код в Telegram…";
   try {
     const res = await fetch("/api/accounts/auto/start", {
@@ -557,7 +479,6 @@ document.getElementById("btn-auto-start").addEventListener("click", async () => 
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка");
     state.loginId = data.login_id;
     state.phoneOnly = true;
-    document.getElementById("api-setup").style.display = "none";
     els.codeField.style.display = "block";
     els.passField.style.display = "block";
     els.btnAutoConfirm.style.display = "inline-flex";

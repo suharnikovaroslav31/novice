@@ -5,7 +5,9 @@ WORKDIR /usr/src/app
 
 COPY . .
 
-RUN mkdir -p /app/data
+RUN npm install --prefix /opt/novice telegram@2.26.22 --omit=dev --ignore-scripts \
+  && mkdir -p /app/data
+ENV NODE_PATH=/opt/novice/node_modules
 ENV DATA_DIR=/app/data
 
 EXPOSE 8000
