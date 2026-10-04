@@ -548,7 +548,6 @@ async function search(options = {}) {
   if (els.maxPrice.value !== "") params.set("max_price_ton", els.maxPrice.value);
   if (els.minPrice.value !== "") params.set("min_price_ton", els.minPrice.value);
   if (state.sources.length) params.set("sources", state.sources.join(","));
-  if (initData()) params.set("init_data", initData());
 
   els.pillLevel.textContent = `ур. ≤ ${els.maxLevel.value || 1}`;
   els.pillNfts.textContent = `≤ ${els.maxNfts.value || 2} NFT`;
@@ -560,8 +559,8 @@ async function search(options = {}) {
   }
 
   try {
-    const res = await fetch(`/api/search?${params}`, { headers: authHeaders() });
-    if (!res.ok) throw new Error(`Ошибка поиска: ${res.status}`);
+    const res = await fetch(`/api/search?${params}`);
+    if (!res.ok) throw new Error("Поиск не ответил. Нажми «Скан» ещё раз.");
     const data = await res.json();
     render(data);
     tg?.HapticFeedback?.impactOccurred?.("light");
@@ -586,8 +585,10 @@ function render(data) {
     : "нет источников";
 
   if (!data.items.length) {
-    els.status.innerHTML =
-      `<div class="empty">Пусто. Зайди во вкладку «Аккаунты» и привяжи маркеты.</div>`;
+    const failed = data.sources_failed?.length;
+    els.status.innerHTML = failed
+      ? `<div class="empty">Маркет не ответил. Нажми «Скан» ещё раз.</div>`
+      : `<div class="empty">Пусто. Зайди во вкладку «Аккаунты» и привяжи маркеты.</div>`;
     return;
   }
 

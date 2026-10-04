@@ -178,7 +178,18 @@ const server = http.createServer(async (req, res) => {
       try {
         return send(res, 200, JSON.stringify(await searchMarkets(tokens, filters)));
       } catch (err) {
-        return send(res, 500, JSON.stringify({ detail: err.message || "Ошибка поиска" }));
+        console.error("search failed", err && err.message ? err.message : err);
+        return send(
+          res,
+          200,
+          JSON.stringify({
+            items: [],
+            total: 0,
+            demo: false,
+            sources_used: [],
+            sources_failed: ["mrkt", "portals", "tonnel"],
+          })
+        );
       }
     }
     const query = filters.query.toLowerCase();
@@ -267,6 +278,9 @@ const server = http.createServer(async (req, res) => {
 
   send(res, 404, JSON.stringify({ detail: "not found" }));
 });
+
+process.on("uncaughtException", (err) => console.error("uncaught", err));
+process.on("unhandledRejection", (err) => console.error("unhandled", err));
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`NOVICE listening on 0.0.0.0:${PORT}`);
