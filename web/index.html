@@ -605,7 +605,10 @@ function render(data) {
   });
 
   els.list.querySelectorAll("[data-profile]").forEach((btn) => {
-    btn.addEventListener("click", () => openUrl(btn.dataset.profile));
+    btn.addEventListener("click", () => {
+      if (!btn.dataset.profile) return;
+      openUrl(btn.dataset.profile);
+    });
   });
   els.list.querySelectorAll("[data-show]").forEach((btn) => {
     btn.addEventListener("click", () => showNft(btn));
@@ -655,7 +658,7 @@ function cardHtml(item, index) {
           <span class="badge score">${Math.round(item.novice_score || 0)}</span>
         </div>
         <div class="card-actions">
-          <button class="btn btn-ghost" data-profile="${escapeAttr(item.profile_url || item.url || "https://t.me/")}">Профиль</button>
+          <button class="btn btn-ghost" data-profile="${escapeAttr(item.profile_url || "")}" ${item.profile_url ? "" : "disabled"}>Профиль</button>
           <button class="btn btn-primary" data-show="${escapeAttr(item.image_url || "")}" data-title="${escapeAttr(item.title)}" data-price="${escapeAttr(item.price_ton)}" data-url="${escapeAttr(item.url || "https://t.me/")}">Показ NFT</button>
         </div>
       </div>
