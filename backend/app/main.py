@@ -342,8 +342,3 @@ async def miniapp_index():
 @app.get("/styles.css")
 async def miniapp_css():
     return FileResponse(WEB_DIR / "styles.css", media_type="text/css")
-
-
-@app.get("/miniapp.js")
-async def miniapp_js():
-    return FileResponse(WEB_DIR / "miniapp.js", media_type="application/javascript")
