@@ -1,6 +1,7 @@
 FROM node:20-alpine
 
-WORKDIR /app
+# /app is replaced by a git mount at runtime, so the server lives outside it.
+WORKDIR /usr/src/app
 
 COPY . .
 
@@ -9,4 +10,5 @@ ENV DATA_DIR=/app/data
 
 EXPOSE 8000
 
-CMD ["node", "main.py"]
+ENTRYPOINT ["node", "/usr/src/app/main.py"]
+CMD ["node", "/usr/src/app/main.py"]

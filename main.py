@@ -1,6 +1,7 @@
-// Bothost запускает этот файл командой `node main.py`.
-// Расширение .py здесь специально: так настроена точка входа на хостинге.
+// Bothost starts this file with Node. The .py name is the panel entrypoint.
 "use strict";
+
+console.log("NOVICE boot");
 
 const http = require("http");
 const fs = require("fs");
