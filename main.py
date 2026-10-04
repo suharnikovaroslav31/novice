@@ -1,16 +1,228 @@
-"""Точка входа для Bothost: веб + webhook бота на 0.0.0.0:$PORT."""
+// Bothost запускает этот файл командой `node main.py`.
+// Расширение .py здесь специально: так настроена точка входа на хостинге.
+"use strict";
 
-from __future__ import annotations
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const { URL } = require("url");
 
-import os
+const PORT = Number(process.env.PORT || 8000);
+const WEB = path.join(__dirname, "web");
+const TOKEN =
+  process.env.BOT_TOKEN ||
+  process.env.TELEGRAM_BOT_TOKEN ||
+  process.env.API_TOKEN ||
+  "";
 
-import uvicorn
+const GIFTS = [
+  ["Desk Calendar", "📅", "#9BE7C8", "#FFE1D2"],
+  ["Lol Pop", "🍭", "#FFB4C8", "#D8FF3F"],
+  ["Homemade Cake", "🎂", "#FFD9A8", "#C9F7B4"],
+  ["Spiced Wine", "🍷", "#E8B0C8", "#B8FFE4"],
+  ["Eternal Rose", "🌹", "#FFB3A8", "#F7E8B0"],
+  ["Delicious Cake", "🧁", "#FFD0E0", "#C8F0FF"],
+  ["Green Star", "⭐", "#D8FF3F", "#9BE7C8"],
+  ["Crystal Ball", "🔮", "#C8D8FF", "#E8C8FF"],
+];
+const MODELS = ["Default", "Gold", "Neon", "Midnight", "Pearl"];
+const BACKDROPS = ["Black", "Ivory", "Sky", "Burgundy", "Mint"];
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8000"))
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=port,
-        app_dir=os.path.join(os.path.dirname(__file__), "backend"),
-    )
+function publicBase() {
+  const domain = (process.env.DOMAIN || "").trim();
+  if (domain && domain !== "Значение") {
+    return domain.startsWith("http") ? domain.replace(/\/$/, "") : `https://${domain.replace(/\/$/, "")}`;
+  }
+  const webhook = (process.env.WEBHOOK_URL || "").trim();
+  if (webhook.startsWith("https://")) return webhook.split("/webhook")[0];
+  return "https://bot-1791107545-9749-suharnikovaroslav31.bothost.tech";
+}
+
+function svg(name, emoji, c1, c2) {
+  const xml = `<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='${c1}'/><stop offset='100%' stop-color='${c2}'/></linearGradient></defs><rect width='512' height='512' rx='96' fill='url(#g)'/><text x='256' y='280' text-anchor='middle' font-size='150'>${emoji}</text><text x='256' y='390' text-anchor='middle' font-family='Arial' font-size='28' font-weight='700' fill='#101812'>${name}</text></svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+}
+
+function demoItems() {
+  const items = [];
+  for (let i = 0; i < 24; i++) {
+    const [name, emoji, c1, c2] = GIFTS[i % GIFTS.length];
+    const price = Math.round((0.9 + ((i * 37) % 110) / 10) * 100) / 100;
+    items.push({
+      id: `demo-${i}`,
+      source: "demo",
+      title: `${name} #${1000 + i}`,
+      collection: name,
+      model: MODELS[i % MODELS.length],
+      backdrop: BACKDROPS[i % BACKDROPS.length],
+      symbol: null,
+      number: 1000 + i,
+      price_ton: price,
+      currency: "TON",
+      image_url: svg(name, emoji, c1, c2),
+      url: "https://t.me/mrkt",
+      seller: {
+        id: `u-${i}`,
+        username: `newbie_${i}`,
+        display_name: `Новичок ${i + 1}`,
+        level: 1,
+        nft_count: i % 2 === 0 ? 1 : 2,
+        sales_count: 0,
+        is_reseller: false,
+      },
+      novice_score: 90 - (i % 5),
+      reasons: ["уровень 1", "не перекуп"],
+    });
+  }
+  items.sort((a, b) => a.price_ton - b.price_ton);
+  return items;
+}
+
+const LISTINGS = demoItems();
+
+function send(res, code, body, type) {
+  const data = Buffer.from(body);
+  res.writeHead(code, {
+    "Content-Type": type || "application/json; charset=utf-8",
+    "Content-Length": data.length,
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.end(data);
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) return resolve({});
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve({});
+      }
+    });
+  });
+}
+
+async function tg(method, payload) {
+  if (!TOKEN) return;
+  await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function registerTelegram() {
+  const base = publicBase();
+  if (!TOKEN || !base.startsWith("https://")) return;
+  await tg("setWebhook", { url: `${base}/webhook`, drop_pending_updates: false });
+  await tg("setChatMenuButton", {
+    menu_button: { type: "web_app", text: "NOVICE", web_app: { url: base } },
+  });
+  console.log("mini app url", base);
+}
+
+async function onUpdate(update) {
+  const message = update.message;
+  if (!message || !message.chat) return;
+  const base = publicBase();
+  const button = base.startsWith("https://")
+    ? {
+        inline_keyboard: [[{ text: "Открыть NOVICE", web_app: { url: base } }]],
+      }
+    : undefined;
+  await tg("sendMessage", {
+    chat_id: message.chat.id,
+    text: "NOVICE ищет дешёвые Telegram NFT у новичков.\nЖми кнопку NOVICE слева от поля ввода.",
+    reply_markup: button,
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, "http://127.0.0.1");
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    });
+    return res.end();
+  }
+
+  if (url.pathname === "/health" || url.pathname === "/api/health") {
+    return send(res, 200, JSON.stringify({ ok: true, demo_mode: true }));
+  }
+
+  if (url.pathname === "/api/search") {
+    const maxPrice = url.searchParams.get("max_price_ton");
+    const query = (url.searchParams.get("query") || "").toLowerCase();
+    let items = LISTINGS;
+    if (maxPrice) items = items.filter((item) => item.price_ton <= Number(maxPrice));
+    if (query) {
+      items = items.filter((item) =>
+        `${item.title} ${item.collection} ${item.model}`.toLowerCase().includes(query)
+      );
+    }
+    return send(
+      res,
+      200,
+      JSON.stringify({
+        items,
+        total: items.length,
+        demo: true,
+        sources_used: ["demo"],
+        sources_failed: [],
+      })
+    );
+  }
+
+  if (url.pathname === "/api/accounts") {
+    return send(
+      res,
+      200,
+      JSON.stringify({
+        accounts: [
+          { source: "mrkt", connected: false },
+          { source: "portals", connected: false },
+          { source: "tonnel", connected: false },
+        ],
+        connected_count: 0,
+      })
+    );
+  }
+
+  if (url.pathname === "/api/accounts/auto/config") {
+    return send(
+      res,
+      200,
+      JSON.stringify({
+        phone_only: false,
+        needs_api_setup: false,
+        hint: "Сначала открой поиск. Привязка маркетов включится следующим шагом.",
+      })
+    );
+  }
+
+  if (url.pathname === "/webhook" && req.method === "POST") {
+    const update = await readBody(req);
+    onUpdate(update).catch((err) => console.error(err));
+    return send(res, 200, JSON.stringify({ ok: true }));
+  }
+
+  if (url.pathname === "/" || url.pathname === "/index.html") {
+    return send(res, 200, fs.readFileSync(path.join(WEB, "index.html")), "text/html; charset=utf-8");
+  }
+  if (url.pathname === "/styles.css") {
+    return send(res, 200, fs.readFileSync(path.join(WEB, "styles.css")), "text/css; charset=utf-8");
+  }
+
+  send(res, 404, JSON.stringify({ detail: "not found" }));
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`NOVICE listening on 0.0.0.0:${PORT}`);
+  registerTelegram().catch((err) => console.error(err));
+});
