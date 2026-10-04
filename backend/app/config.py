@@ -23,8 +23,27 @@ class Settings(BaseSettings):
     @field_validator("tg_api_id", mode="before")
     @classmethod
     def empty_api_id(cls, value: Any) -> Any:
-        if value == "" or value is None:
+        if _blank(value):
             return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @field_validator(
+        "bot_token",
+        "webapp_url",
+        "tg_api_hash",
+        "tg_session_string",
+        "mrkt_token",
+        "portals_token",
+        "tonnel_auth",
+        mode="before",
+    )
+    @classmethod
+    def blank_placeholder(cls, value: Any) -> Any:
+        if _blank(value):
+            return ""
         return value
 
     mrkt_token: str = ""
@@ -42,6 +61,13 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
 
 
+def _blank(value: Any) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip().lower()
+    return text in {"", "значение", "none", "null", "undefined"}
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
@@ -53,9 +79,16 @@ def public_base_url() -> str:
     domain = os.getenv("DOMAIN", "").strip()
     webhook = os.getenv("WEBHOOK_URL", "").strip()
 
+    if _blank(domain):
+        domain = ""
+    if _blank(webhook):
+        webhook = ""
+    if _blank(explicit) or explicit.startswith("http://localhost") or explicit.startswith("http://127.0.0.1"):
+        explicit = ""
+
     if domain:
         base = domain if domain.startswith("http") else f"https://{domain}"
         return base.rstrip("/")
     if webhook:
         return webhook.split("/webhook")[0].rstrip("/")
-    return explicit.rstrip("/") or "http://localhost:8000"
+    return explicit.rstrip("/")

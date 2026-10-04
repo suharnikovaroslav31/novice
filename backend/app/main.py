@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -55,7 +56,7 @@ async def lifespan(app: FastAPI):
         webhook = os.getenv("WEBHOOK_URL", "").strip()
         if not webhook and base.startswith("https://"):
             webhook = base.rstrip("/") + "/webhook"
-        if webhook.startswith("https://"):
+        if webhook.startswith("https://") and base.startswith("https://"):
             await bot.set_webhook(webhook, drop_pending_updates=True)
             from aiogram.types import MenuButtonWebApp, WebAppInfo
 
@@ -67,8 +68,12 @@ async def lifespan(app: FastAPI):
             )
             logger.info("Webhook and mini app set: %s", base)
         else:
-            logger.info("Mini app skipped, base url is %s", base)
+            logger.info("No HTTPS domain, starting polling. base=%s", base or "(empty)")
+            app.state.poll_task = asyncio.create_task(dp.start_polling(bot))
     yield
+    poll_task = getattr(app.state, "poll_task", None)
+    if poll_task is not None:
+        poll_task.cancel()
     bot = getattr(app.state, "bot", None)
     if bot is not None:
         await bot.session.close()
