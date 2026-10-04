@@ -51,4 +51,8 @@ def build_dispatcher() -> Dispatcher:
 
 
 def bot_token() -> str:
-    return os.getenv("BOT_TOKEN", "").strip()
+    for key in ("BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "API_TOKEN"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return ""
