@@ -74,6 +74,7 @@ function demoItems() {
         sales_count: 0,
         is_reseller: false,
       },
+      profile_url: "https://t.me/mrkt",
       novice_score: 90 - (i % 5),
       reasons: ["уровень 1", "не перекуп"],
     });

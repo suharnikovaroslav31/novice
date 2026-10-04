@@ -134,6 +134,16 @@
       <button class="tab" data-view="accounts">Аккаунты</button>
     </nav>
 
+    <div class="viewer" id="viewer" hidden>
+      <div class="viewer-card">
+        <button class="modal-close" id="viewer-close" type="button">×</button>
+        <div class="viewer-stage" id="viewer-stage"></div>
+        <h2 id="viewer-title"></h2>
+        <p id="viewer-price"></p>
+        <button class="btn btn-primary" id="viewer-open" type="button">Открыть лот</button>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="modal" hidden>
       <div class="modal">
         <button class="modal-close" id="modal-close">×</button>
@@ -524,7 +534,7 @@ document.getElementById("btn-auto-confirm").addEventListener("click", async () =
 });
 
 /* search */
-async function search() {
+async function search(options = {}) {
   const params = new URLSearchParams({
     max_seller_level: els.maxLevel.value || "1",
     max_seller_nfts: els.maxNfts.value || "2",
@@ -543,9 +553,11 @@ async function search() {
   els.pillLevel.textContent = `ур. ≤ ${els.maxLevel.value || 1}`;
   els.pillNfts.textContent = `≤ ${els.maxNfts.value || 2} NFT`;
 
-  els.status.innerHTML = `<div class="loading"><div class="spinner"></div>Сканируем новичков…</div>`;
-  els.list.innerHTML = "";
-  els.count.textContent = "…";
+  if (!options.quiet) {
+    els.status.innerHTML = `<div class="loading"><div class="spinner"></div>Сканируем лоты…</div>`;
+    els.list.innerHTML = "";
+    els.count.textContent = "…";
+  }
 
   try {
     const res = await fetch(`/api/search?${params}`, { headers: authHeaders() });
@@ -590,9 +602,24 @@ function render(data) {
     });
   });
 
-  els.list.querySelectorAll("[data-url]").forEach((btn) => {
-    btn.addEventListener("click", () => openUrl(btn.dataset.url));
+  els.list.querySelectorAll("[data-profile]").forEach((btn) => {
+    btn.addEventListener("click", () => openUrl(btn.dataset.profile));
   });
+  els.list.querySelectorAll("[data-show]").forEach((btn) => {
+    btn.addEventListener("click", () => showNft(btn));
+  });
+}
+
+function showNft(btn) {
+  const stage = document.getElementById("viewer-stage");
+  const image = btn.dataset.show;
+  stage.innerHTML = image
+    ? `<img src="${escapeAttr(image)}" alt="" />`
+    : `<div class="thumb-fallback">NFT</div>`;
+  document.getElementById("viewer-title").textContent = btn.dataset.title || "NFT";
+  document.getElementById("viewer-price").textContent = btn.dataset.price ? `${btn.dataset.price} TON` : "";
+  document.getElementById("viewer-open").dataset.url = btn.dataset.url || "";
+  document.getElementById("viewer").hidden = false;
 }
 
 function cardHtml(item, index) {
@@ -626,7 +653,8 @@ function cardHtml(item, index) {
           <span class="badge score">${Math.round(item.novice_score || 0)}</span>
         </div>
         <div class="card-actions">
-          <button class="btn btn-primary" data-url="${escapeAttr(item.url || "https://t.me/")}">Открыть лот</button>
+          <button class="btn btn-ghost" data-profile="${escapeAttr(item.profile_url || item.url || "https://t.me/")}">Профиль</button>
+          <button class="btn btn-primary" data-show="${escapeAttr(item.image_url || "")}" data-title="${escapeAttr(item.title)}" data-price="${escapeAttr(item.price_ton)}" data-url="${escapeAttr(item.url || "https://t.me/")}">Показ NFT</button>
         </div>
       </div>
     </article>
@@ -650,7 +678,17 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll("'", "&#39;");
 }
 
-document.getElementById("btn-search").addEventListener("click", search);
+document.getElementById("viewer-close").addEventListener("click", () => {
+  document.getElementById("viewer").hidden = true;
+});
+document.getElementById("viewer").addEventListener("click", (event) => {
+  if (event.target.id === "viewer") document.getElementById("viewer").hidden = true;
+});
+document.getElementById("viewer-open").addEventListener("click", (event) => {
+  openUrl(event.currentTarget.dataset.url || "");
+});
+
+document.getElementById("btn-search").addEventListener("click", () => search());
 document.getElementById("btn-apply").addEventListener("click", search);
 els.query.addEventListener("keydown", (e) => {
   if (e.key === "Enter") search();
@@ -669,6 +707,7 @@ els.query.addEventListener("keydown", (e) => {
   await refreshAccountStatus();
   renderAccounts();
   search();
+  setInterval(() => search({ quiet: true }), 30000);
 })();
 
     </script>
