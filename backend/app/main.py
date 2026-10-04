@@ -57,9 +57,17 @@ async def lifespan(app: FastAPI):
             webhook = base.rstrip("/") + "/webhook"
         if webhook.startswith("https://"):
             await bot.set_webhook(webhook, drop_pending_updates=True)
-            logger.info("Webhook set: %s", webhook)
+            from aiogram.types import MenuButtonWebApp, WebAppInfo
+
+            await bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="NOVICE",
+                    web_app=WebAppInfo(url=base),
+                )
+            )
+            logger.info("Webhook and mini app set: %s", base)
         else:
-            logger.info("Webhook skipped, base url is %s", base)
+            logger.info("Mini app skipped, base url is %s", base)
     yield
     bot = getattr(app.state, "bot", None)
     if bot is not None:
