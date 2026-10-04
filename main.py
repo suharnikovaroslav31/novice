@@ -158,7 +158,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/health" || url.pathname === "/api/health") {
-    return send(res, 200, JSON.stringify({ ok: true, demo_mode: true }));
+    return send(res, 200, JSON.stringify({ ok: true, demo_mode: true, version: 4 }));
   }
 
   if (url.pathname === "/api/search") {
@@ -176,7 +176,11 @@ const server = http.createServer(async (req, res) => {
     const live = Boolean(tokens.mrkt || tokens.portals || tokens.tonnel);
     if (live) {
       try {
-        return send(res, 200, JSON.stringify(await searchMarkets(tokens, filters)));
+        const result = await Promise.race([
+          searchMarkets(tokens, filters),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3500)),
+        ]);
+        return send(res, 200, JSON.stringify(result));
       } catch (err) {
         console.error("search failed", err && err.message ? err.message : err);
         return send(
